@@ -1,0 +1,7 @@
+---
+Accounts:
+ - ConsumerKey: "D"
+   ConsumerSecret: "C"
+   OAuthToken: "B"
+   OAuthSecret: "A"
+   Name: "@example"
