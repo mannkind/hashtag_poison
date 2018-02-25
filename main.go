@@ -12,20 +12,20 @@ import (
 	"github.com/spf13/viper"
 )
 
-const TRENDLEN int8 = 50
-const USA int64 = 23424977
-const HASHTAG string = "#"
-const EMPTY string = ""
-const DOTDOTDOT string = "…"
-const REPLACE string = "~1REPLACEMENTHASHTAG1~"
-const SLEEP_SHORT int = 3
-const SLEEP_LONG int = 17
+const trendlen int8 = 50
+const usa int64 = 23424977
+const hashtag string = "#"
+const emptyString string = ""
+const ellipses string = "…"
+const hashtagPlaceholder string = "~1REPLACEMENTHASHTAG1~"
+const sleepShort int = 3
+const sleepLong int = 17
 
-type TwitterConfig struct {
-	Accounts []TwitterAccount
+type twitterConfig struct {
+	Accounts []twitterAccount
 }
 
-type TwitterAccount struct {
+type twitterAccount struct {
 	ConsumerKey    string
 	ConsumerSecret string
 	OAuthToken     string
@@ -33,16 +33,16 @@ type TwitterAccount struct {
 	Name           string
 }
 
-type TwitterTweet struct {
+type twitterTweet struct {
 	Hashtag string
 	Text    string
 }
 
 // A place to hold known tweets, in order to avoid posting duplicate tweets
-var knownTweets map[int64]bool = make(map[int64]bool)
+var knownTweets = make(map[int64]bool)
 
 func main() {
-	config := TwitterConfig{}
+	config := twitterConfig{}
 
 	log.Printf("Reading config.yaml")
 	viper.SetConfigFile("config.yaml")
@@ -50,13 +50,13 @@ func main() {
 	viper.Unmarshal(&config)
 	log.Printf("Done reading config.yaml")
 
-	for true {
+	for {
 		for _, account := range config.Accounts {
 			log.Printf("Poisoning trends from %s", account.Name)
 			poisonTrends(account)
 
 			r1 := rand.New(rand.NewSource(time.Now().UnixNano()))
-			sleep := time.Duration(r1.Intn(SLEEP_SHORT)) * time.Minute
+			sleep := time.Duration(r1.Intn(sleepShort)) * time.Minute
 
 			log.Printf("Done poisoning trends from %s", account.Name)
 			log.Printf("Sleeping %s before next account", sleep)
@@ -64,7 +64,7 @@ func main() {
 		}
 
 		r1 := rand.New(rand.NewSource(time.Now().UnixNano()))
-		sleep := time.Duration(r1.Intn(SLEEP_LONG)) * time.Minute
+		sleep := time.Duration(r1.Intn(sleepLong)) * time.Minute
 
 		log.Printf("Done poisoning from all accounts")
 		log.Printf("Sleeping %s before restarting", sleep)
@@ -73,7 +73,7 @@ func main() {
 }
 
 // poisonTrends - Find trends, find tweets, truffleShuffle, post nonsense
-func poisonTrends(account TwitterAccount) {
+func poisonTrends(account twitterAccount) {
 	config := oauth1.NewConfig(account.ConsumerKey, account.ConsumerSecret)
 	token := oauth1.NewToken(account.OAuthToken, account.OAuthSecret)
 	client := twitter.NewClient(config.Client(oauth1.NoContext, token))
@@ -84,13 +84,13 @@ func poisonTrends(account TwitterAccount) {
 
 /// findTrends - Get the current trends, shuffling the values returned by Twitter
 func findTrends(client *twitter.Client) []string {
-	trends := make([]string, 0, TRENDLEN)
-	trendLists, _, _ := client.Trends.Place(USA, nil)
+	trends := make([]string, 0, trendlen)
+	trendLists, _, _ := client.Trends.Place(usa, nil)
 	for _, trendList := range trendLists {
 		for _, trend := range trendList.Trends {
 			// Let's only take trending topics with hashtags
 			name := strings.TrimSpace(trend.Name)
-			if !strings.HasPrefix(name, HASHTAG) || name == EMPTY {
+			if !strings.HasPrefix(name, hashtag) || name == emptyString {
 				continue
 			}
 
@@ -109,7 +109,7 @@ func findTrends(client *twitter.Client) []string {
 
 // poison - Poison the trends on Twitter
 func poison(client *twitter.Client, trends []string) {
-	trendTweetMap := make(map[string]TwitterTweet)
+	trendTweetMap := make(map[string]twitterTweet)
 	for _, trend := range trends {
 		tweet := searchTweets(client, trend)
 		trendTweetMap[trend] = tweet
@@ -140,16 +140,16 @@ func poison(client *twitter.Client, trends []string) {
 		status := tweet.Text
 
 		// Replace the trend w/a placeholder
-		status = strings.Replace(status, tweet.Hashtag, REPLACE, -1)
+		status = strings.Replace(status, tweet.Hashtag, hashtagPlaceholder, -1)
 
 		// Remove mentions, other hashtags, etc
 		re1 := regexp.MustCompile("\\B[@#]\\S+\\b\\s?")
 		re2 := regexp.MustCompile("RT : ")
-		status = re1.ReplaceAllString(status, EMPTY)
-		status = re2.ReplaceAllString(status, EMPTY)
+		status = re1.ReplaceAllString(status, emptyString)
+		status = re2.ReplaceAllString(status, emptyString)
 
 		// Replace the placeholder w/a new trend
-		status = strings.Replace(status, REPLACE, trend, -1)
+		status = strings.Replace(status, hashtagPlaceholder, trend, -1)
 
 		// Post a new tweet
 		postTweet(client, status)
@@ -158,7 +158,7 @@ func poison(client *twitter.Client, trends []string) {
 		log.Printf("       - New Tweet: %s", status)
 
 		r1 := rand.New(rand.NewSource(time.Now().UnixNano()))
-		sleep := time.Duration(r1.Intn(SLEEP_SHORT)) * time.Minute
+		sleep := time.Duration(r1.Intn(sleepShort)) * time.Minute
 
 		log.Printf("    Done poisoning trend: %s", trend)
 		log.Printf("    Sleeping %s before next trend", sleep)
@@ -167,8 +167,8 @@ func poison(client *twitter.Client, trends []string) {
 }
 
 // searchTweets - Search for new tweets for a given trend
-func searchTweets(client *twitter.Client, trend string) TwitterTweet {
-	tweet := TwitterTweet{
+func searchTweets(client *twitter.Client, trend string) twitterTweet {
+	tweet := twitterTweet{
 		Hashtag: trend,
 	}
 
@@ -179,7 +179,7 @@ func searchTweets(client *twitter.Client, trend string) TwitterTweet {
 	// Find a tweet for the trend, but don't use known tweets from the cycle
 	for _, status := range search.Statuses {
 		if _, ok := knownTweets[status.ID]; !ok &&
-			!strings.HasSuffix(status.Text, DOTDOTDOT) &&
+			!strings.HasSuffix(status.Text, ellipses) &&
 			strings.Contains(status.Text, trend) {
 
 			knownTweets[status.ID] = true
